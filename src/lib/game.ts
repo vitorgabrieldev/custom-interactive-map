@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Player, InventoryItem, Base, StashItem, LootSpawn, Raid } from '../types/game'
+import type { Player, InventoryItem, Base, StashItem, LootSpawn, Raid, RaidHistoryEntry } from '../types/game'
 
 const ITEM_FIELDS = `
   id, name, slug, icon, description, attributes, craftable, lootable,
@@ -34,6 +34,13 @@ export async function recordAndGetPlayer(playerId: string): Promise<Player | nul
     .single()
   if (error || !data) return null
   return data as Player
+}
+
+export async function savePlayerPosition(playerId: string, lng: number, lat: number): Promise<void> {
+  await supabase
+    .from('players')
+    .update({ last_lng: lng, last_lat: lat })
+    .eq('id', playerId)
 }
 
 export async function getPlayer(playerId: string): Promise<Player | null> {
@@ -75,12 +82,12 @@ export async function plantBase(
   const { error: debitErr } = await supabase.rpc('debit_rad', {
     p_player_id: ownerId,
     p_type_slug: 'PLANTAR_BASE',
-    p_amount: 50,
+    p_amount: 250,
     p_description: `Plantar base: ${name}`,
   })
   if (debitErr) {
     const msg = debitErr.message.includes('RAD_INSUFICIENTE')
-      ? 'RAD insuficiente. Precisa de 50 RAD para plantar uma base.'
+      ? 'RAD insuficiente. Precisa de 250 RAD para plantar uma base.'
       : debitErr.message
     throw new Error(msg)
   }
@@ -95,7 +102,7 @@ export async function plantBase(
       await supabase.rpc('credit_rad', {
         p_player_id: ownerId,
         p_type_slug: 'AJUSTE_SISTEMA',
-        p_amount: 50,
+        p_amount: 250,
         p_description: 'Estorno: falha ao criar base',
       })
     } catch {}
@@ -105,6 +112,25 @@ export async function plantBase(
     throw new Error(msg)
   }
   return data as Base
+}
+
+export const STASH_SLOT_COST = 20
+export const STASH_SLOT_MAX  = 50
+
+export async function buyStashSlot(baseId: string, playerId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('buy_stash_slot', {
+    p_base_id: baseId,
+    p_player_id: playerId,
+  })
+  if (error) {
+    let msg = error.message
+    if (msg.includes('RAD_INSUFICIENTE')) msg = `RAD insuficiente. Cada slot custa ${STASH_SLOT_COST} RAD.`
+    if (msg.includes('STASH_MÁXIMO'))     msg = `Limite máximo de ${STASH_SLOT_MAX} slots atingido.`
+    if (msg.includes('BASE_INATIVA'))     msg = 'Não é possível expandir uma base em ruína.'
+    if (msg.includes('ACESSO_NEGADO'))    msg = 'Somente o dono pode expandir o stash.'
+    throw new Error(msg)
+  }
+  return data as number
 }
 
 export async function getBaseStash(baseId: string): Promise<StashItem[]> {
@@ -232,6 +258,15 @@ export async function startRaid(raiderId: string, baseId: string): Promise<Raid>
     if (msg.includes('BASE_EM_RUÍNA')) msg = 'Base em ruína — acesse o loot diretamente.'
     if (msg.includes('unique') || msg.includes('idx_raids_unique_pending'))
       msg = 'Esta base já está sendo invadida.'
+    if (msg.includes('RAID_COOLDOWN')) {
+      const match = msg.match(/(\d{4}-\d{2}-\d{2}T[\d:.+\-Z]+)/)
+      if (match) {
+        const when = new Date(match[1])
+        msg = `Cooldown ativo. Próximo raid disponível às ${when.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} de ${when.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}.`
+      } else {
+        msg = 'Cooldown ativo. Aguarde 12h desde o último raid.'
+      }
+    }
     throw new Error(msg)
   }
   return data as Raid
@@ -285,4 +320,15 @@ export async function getActiveRaidsOnMyBase(ownerId: string): Promise<Raid[]> {
     .eq('status', 'PENDENTE')
   if (error) return []
   return (data || []) as Raid[]
+}
+
+export async function getBaseRaidHistory(baseId: string): Promise<RaidHistoryEntry[]> {
+  const { data, error } = await supabase
+    .from('raids')
+    .select('*, raider:players!raider_id(username)')
+    .eq('base_id', baseId)
+    .order('started_at', { ascending: false })
+    .limit(30)
+  if (error) return []
+  return (data || []) as RaidHistoryEntry[]
 }

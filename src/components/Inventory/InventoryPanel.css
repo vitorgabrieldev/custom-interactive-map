@@ -156,8 +156,8 @@
 }
 
 .inv-slot--empty {
-  background: transparent;
-  border: 1px dashed #1a1a1a;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px dashed #3a3a3a;
   cursor: default;
 }
 
@@ -190,7 +190,7 @@
 
 .inv-slot__empty-num {
   font-size: 14px;
-  color: #1e1e1e;
+  color: #404040;
 }
 
 .inv-slot__loading {

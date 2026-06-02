@@ -202,6 +202,24 @@
   color: #cccccc;
 }
 
+.base-panel__action-btn--view {
+  background: rgba(96, 165, 250, 0.06);
+  border: 1px solid rgba(96, 165, 250, 0.2);
+  color: #60a5fa;
+  margin-top: 6px;
+}
+
+.base-panel__action-btn--view:hover:not(:disabled) {
+  background: rgba(96, 165, 250, 0.12);
+  border-color: #60a5fa;
+  box-shadow: 0 0 10px rgba(96, 165, 250, 0.15);
+}
+
+.base-panel__action-btn--view:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .base-panel__raid-active {
   display: flex;
   align-items: center;

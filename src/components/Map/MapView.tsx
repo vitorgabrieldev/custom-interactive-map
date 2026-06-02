@@ -47,10 +47,6 @@ const CITY_MARKERS_SRC = 'city-markers-src'
 const ZONES_SRC        = 'zones-src'
 const BASES_SRC        = 'bases-src'
 const LOOT_SRC         = 'loot-src'
-const PLAYER_SRC       = 'player-src'
-
-const WALK_SPEED   = 0.000030
-const SPRINT_SPEED = 0.000070
 
 const RARITY_SLUGS = ['NORMAL', 'INCOMUM', 'RARO', 'LENDÁRIO', 'ÚNICO', 'ARTEFATO']
 
@@ -344,39 +340,7 @@ function buildLootGeoJSON(loot: LootSpawn[]): GeoJSON.FeatureCollection {
   }
 }
 
-function buildPlayerGeoJSON(center: [number, number]): GeoJSON.FeatureCollection {
-  const r = 0.000028 // ~3m radius
-  const pts = 20
-  const ring = Array.from({ length: pts }, (_, i) => {
-    const a = (i / pts) * Math.PI * 2
-    return [center[0] + Math.cos(a) * r, center[1] + Math.sin(a) * r] as [number, number]
-  })
-  ring.push(ring[0])
-  return {
-    type: 'FeatureCollection',
-    features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: {} }],
-  }
-}
-
-function emptyGeoJSON(): GeoJSON.FeatureCollection {
-  return { type: 'FeatureCollection', features: [] }
-}
-
 // ── Other helpers ─────────────────────────────────────────────────────────────
-
-function createArrowEl(name: string, color: string): HTMLElement {
-  const el = document.createElement('div')
-  el.className = 'remote-cursor'
-  el.innerHTML = `
-    <svg width="18" height="22" viewBox="0 0 18 22" fill="none" xmlns="http://www.w3.org/2000/svg"
-         style="display:block;filter:drop-shadow(0 1px 4px rgba(0,0,0,.9))">
-      <path d="M9 1L17 19L9 15L1 19L9 1Z"
-            fill="${color}" stroke="#0d0d0d" stroke-width="1.5" stroke-linejoin="round"/>
-    </svg>
-    <span class="remote-cursor__name" style="color:${color}">${name}</span>
-  `
-  return el
-}
 
 // Builds zone GeoJSON: user danger markers + precomputed city danger zones.
 // Returns empty collection when 'danger' category is toggled off.
@@ -467,7 +431,6 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
   const userMarkerRef = useRef<maplibregl.Marker | null>(null)
-  const remoteCursorsRef = useRef<Map<number, maplibregl.Marker>>(new Map())
   const activePopupRef = useRef<maplibregl.Popup | null>(null)
 
   const userLocationRef = useRef<[number, number] | null>(null)
@@ -481,11 +444,6 @@ export function MapView({
   const onMapClickRef = useRef(onMapClick)
   const plantingModeRef = useRef(plantingMode)
 
-  // Walk refs
-  const walkPosRef  = useRef<[number, number] | null>(null)
-  const walkKeysRef = useRef({ w: false, a: false, s: false, d: false, q: false, e: false, shift: false })
-  const walkAnimRef = useRef<number | null>(null)
-
   const [mapLoaded, setMapLoaded] = useState(false)
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null)
   const [isRouting, setIsRouting] = useState(false)
@@ -495,14 +453,18 @@ export function MapView({
   const updatePresenceRef = useRef(updateMyPresence)
   useEffect(() => { updatePresenceRef.current = updateMyPresence }, [updateMyPresence])
 
-  const cursorData = useOthers((others) =>
-    others.map((u) => ({
-      id: u.connectionId,
-      cursor: u.presence.cursor,
-      name: u.presence.name,
-      color: u.presence.color,
-    }))
+  const othersCursors = useOthers((others) =>
+    others
+      .filter((u) => u.presence.cursor != null)
+      .map((u) => ({
+        id: u.connectionId,
+        cursor: u.presence.cursor!,
+        name: u.presence.name,
+        color: u.presence.color,
+      }))
   )
+
+  const cursorMarkersRef = useRef<Map<number, maplibregl.Marker>>(new Map())
 
   const rawSelections = useOthersMapped((user) => ({
     selectedMarkerId: user.presence.selectedMarkerId,
@@ -821,38 +783,6 @@ export function MapView({
         paint: { 'line-color': '#e9d5ff', 'line-width': 1.5, 'line-dasharray': [4, 6], 'line-opacity': 0.6 },
         layout: { 'line-cap': 'butt' } })
 
-      // ── 8. Player 3D (walk mode) ──────────────────────────────────────────
-      map.addSource(PLAYER_SRC, {
-        type: 'geojson',
-        data: emptyGeoJSON(),
-      })
-
-      // Glow ring at ground level
-      map.addLayer({
-        id: 'player-glow',
-        type: 'fill-extrusion',
-        source: PLAYER_SRC,
-        paint: {
-          'fill-extrusion-color': '#f59e0b',
-          'fill-extrusion-height': 0.3,
-          'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 0.35,
-        },
-      })
-
-      // Player body — amber cylinder
-      map.addLayer({
-        id: 'player-3d',
-        type: 'fill-extrusion',
-        source: PLAYER_SRC,
-        paint: {
-          'fill-extrusion-color': '#f59e0b',
-          'fill-extrusion-height': 1.9,
-          'fill-extrusion-base': 0,
-          'fill-extrusion-opacity': 1,
-        },
-      })
-
       setMapLoaded(true)
     })
 
@@ -1006,8 +936,8 @@ export function MapView({
 
     mapRef.current = map
     return () => {
-      remoteCursorsRef.current.forEach((m) => m.remove())
-      remoteCursorsRef.current.clear()
+      for (const marker of cursorMarkersRef.current.values()) marker.remove()
+      cursorMarkersRef.current.clear()
       userMarkerRef.current?.remove()
       activePopupRef.current?.remove()
       map.remove()
@@ -1071,40 +1001,39 @@ export function MapView({
     userMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat(userLocation)
       .addTo(map)
-    // Place player at detected location and keep 3D pitch
-    walkPosRef.current = userLocation
-    ;(map.getSource(PLAYER_SRC) as maplibregl.GeoJSONSource | undefined)
-      ?.setData(buildPlayerGeoJSON(userLocation))
     map.flyTo({ center: userLocation, zoom: 15, pitch: 55, duration: 1800 })
   }, [userLocation])
 
-  // ── Remote cursors (update position only, no recreation) ───────────────────
+  // ── Other players cursors ───────────────────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current
-    if (!map) return
+    if (!map || !mapLoaded) return
 
-    const seen = new Set(cursorData.map((u) => u.id))
-    remoteCursorsRef.current.forEach((m, id) => {
-      if (!seen.has(id)) { m.remove(); remoteCursorsRef.current.delete(id) }
-    })
+    const seen = new Set<number>()
 
-    for (const { id, cursor, name, color } of cursorData) {
-      if (!cursor) {
-        remoteCursorsRef.current.get(id)?.remove()
-        remoteCursorsRef.current.delete(id)
-        continue
-      }
-      const existing = remoteCursorsRef.current.get(id)
+    for (const u of othersCursors) {
+      seen.add(u.id)
+      const existing = cursorMarkersRef.current.get(u.id)
       if (existing) {
-        existing.setLngLat([cursor.lng, cursor.lat])
+        existing.setLngLat([u.cursor.lng, u.cursor.lat])
       } else {
-        const m = new maplibregl.Marker({ element: createArrowEl(name, color), anchor: 'top-left' })
-          .setLngLat([cursor.lng, cursor.lat])
+        const el = document.createElement('div')
+        el.style.cssText = `position:relative;width:14px;height:14px;background:${u.color};border:2px solid #fff;border-radius:50%;pointer-events:none;box-shadow:0 0 8px ${u.color};`
+        const label = document.createElement('span')
+        label.textContent = u.name
+        label.style.cssText = `position:absolute;left:18px;top:-3px;color:${u.color};font:bold 11px/1 monospace;white-space:nowrap;text-shadow:0 1px 3px #000,0 0 6px #000;pointer-events:none;`
+        el.appendChild(label)
+        const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+          .setLngLat([u.cursor.lng, u.cursor.lat])
           .addTo(map)
-        remoteCursorsRef.current.set(id, m)
+        cursorMarkersRef.current.set(u.id, marker)
       }
     }
-  }, [cursorData])
+
+    for (const [id, marker] of cursorMarkersRef.current) {
+      if (!seen.has(id)) { marker.remove(); cursorMarkersRef.current.delete(id) }
+    }
+  }, [othersCursors, mapLoaded])
 
   // ── Fly to selected marker ──────────────────────────────────────────────────
   useEffect(() => {
@@ -1113,86 +1042,7 @@ export function MapView({
     map.flyTo({ center: selectedMarker.coordinates, zoom: Math.max(map.getZoom(), 14), duration: 700 })
   }, [selectedMarker])
 
-  // ── WASD always active: keyboard listeners ───────────────────────────────────
-  useEffect(() => {
-    const onDown = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement
-      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return
-      const k = walkKeysRef.current
-      if (e.code === 'KeyW' || e.code === 'ArrowUp')    { k.w = true; e.preventDefault() }
-      if (e.code === 'KeyS' || e.code === 'ArrowDown')  { k.s = true; e.preventDefault() }
-      if (e.code === 'KeyA' || e.code === 'ArrowLeft')  { k.a = true; e.preventDefault() }
-      if (e.code === 'KeyD' || e.code === 'ArrowRight') { k.d = true; e.preventDefault() }
-      if (e.code === 'KeyQ') { k.q = true; e.preventDefault() }
-      if (e.code === 'KeyE') { k.e = true; e.preventDefault() }
-      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') k.shift = true
-    }
-    const onUp = (e: KeyboardEvent) => {
-      const k = walkKeysRef.current
-      if (e.code === 'KeyW' || e.code === 'ArrowUp')    k.w = false
-      if (e.code === 'KeyS' || e.code === 'ArrowDown')  k.s = false
-      if (e.code === 'KeyA' || e.code === 'ArrowLeft')  k.a = false
-      if (e.code === 'KeyD' || e.code === 'ArrowRight') k.d = false
-      if (e.code === 'KeyQ') k.q = false
-      if (e.code === 'KeyE') k.e = false
-      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') k.shift = false
-    }
-    window.addEventListener('keydown', onDown)
-    window.addEventListener('keyup', onUp)
-    return () => {
-      window.removeEventListener('keydown', onDown)
-      window.removeEventListener('keyup', onUp)
-      walkKeysRef.current = { w: false, a: false, s: false, d: false, q: false, e: false, shift: false }
-    }
-  }, [])
 
-  // ── Walk RAF loop: always running when map is loaded ─────────────────────────
-  useEffect(() => {
-    const map = mapRef.current
-    if (!map || !mapLoaded) return
-
-    // Init player at map center
-    const initC = map.getCenter()
-    const initPos: [number, number] = [initC.lng, initC.lat]
-    walkPosRef.current = initPos
-    ;(map.getSource(PLAYER_SRC) as maplibregl.GeoJSONSource | undefined)
-      ?.setData(buildPlayerGeoJSON(initPos))
-
-    const tick = () => {
-      const m = mapRef.current
-      if (!m) return
-      const keys = walkKeysRef.current
-
-      if (keys.q) m.setBearing(m.getBearing() - 2.2)
-      if (keys.e) m.setBearing(m.getBearing() + 2.2)
-
-      if (keys.w || keys.a || keys.s || keys.d) {
-        const rad = (m.getBearing() * Math.PI) / 180
-        const spd = keys.shift ? SPRINT_SPEED : WALK_SPEED
-        let dLng = 0, dLat = 0
-        if (keys.w) { dLng += Math.sin(rad) * spd; dLat += Math.cos(rad) * spd }
-        if (keys.s) { dLng -= Math.sin(rad) * spd; dLat -= Math.cos(rad) * spd }
-        if (keys.a) { dLng -= Math.cos(rad) * spd; dLat += Math.sin(rad) * spd }
-        if (keys.d) { dLng += Math.cos(rad) * spd; dLat -= Math.sin(rad) * spd }
-
-        const cur = walkPosRef.current
-        if (cur) {
-          const newPos: [number, number] = [cur[0] + dLng, cur[1] + dLat]
-          walkPosRef.current = newPos
-          ;(m.getSource(PLAYER_SRC) as maplibregl.GeoJSONSource | undefined)
-            ?.setData(buildPlayerGeoJSON(newPos))
-          m.setCenter(newPos)
-        }
-      }
-
-      walkAnimRef.current = requestAnimationFrame(tick)
-    }
-
-    walkAnimRef.current = requestAnimationFrame(tick)
-    return () => {
-      if (walkAnimRef.current) cancelAnimationFrame(walkAnimRef.current)
-    }
-  }, [mapLoaded])
 
   const clearRoute = useCallback(() => {
     const map = mapRef.current
@@ -1231,17 +1081,6 @@ export function MapView({
         <div className="map-hint">DUPLO CLIQUE PARA TRAÇAR ROTA</div>
       )}
 
-      {mapLoaded && (
-        <div className="walk-hint">
-          <span className="walk-hint__key">W A S D</span> MOVER
-          <span className="walk-hint__sep">·</span>
-          <span className="walk-hint__key">Q E</span> GIRAR
-          <span className="walk-hint__sep">·</span>
-          <span className="walk-hint__key">SHIFT</span> CORRER
-          <span className="walk-hint__sep">·</span>
-          <span className="walk-hint__key">DRAG</span> CÂMERA
-        </div>
-      )}
     </div>
   )
 }

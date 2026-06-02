@@ -5,6 +5,7 @@ import { AuthScreen } from './components/Auth/AuthScreen'
 import { PlayerHUD } from './components/HUD/PlayerHUD'
 import { InventoryPanel } from './components/Inventory/InventoryPanel'
 import { BasePanel, BasePlantModal } from './components/Base/BasePanel'
+import { BaseView } from './components/Base/BaseView'
 import { StashPanel } from './components/Base/StashPanel'
 import { RaidHUD } from './components/Raid/RaidHUD'
 import { MARKERS, relocateMarkers, type MapMarker, type MarkerCategory } from './data/markers'
@@ -18,6 +19,7 @@ import {
   getLootSpawns,
   getBaseStash,
   plantBase,
+  buyStashSlot,
   depositToStash,
   withdrawFromStash,
   collectLoot,
@@ -26,8 +28,9 @@ import {
   defendBase,
   getMyActiveRaids,
   getActiveRaidsOnMyBase,
+  getBaseRaidHistory,
 } from './lib/game'
-import type { Player, InventoryItem, Base, StashItem, LootSpawn, Raid } from './types/game'
+import type { Player, InventoryItem, Base, StashItem, LootSpawn, Raid, RaidHistoryEntry } from './types/game'
 import './App.css'
 
 const ALL_CATEGORIES = new Set<MarkerCategory>([
@@ -76,6 +79,8 @@ function AppInner({ username, userId }: { username: string; userId: string }) {
   const [selectedBase, setSelectedBase] = useState<Base | null>(null)
   const [showInventory, setShowInventory] = useState(false)
   const [showStash, setShowStash] = useState(false)
+  const [showBaseView, setShowBaseView] = useState(false)
+  const [baseRaids, setBaseRaids] = useState<RaidHistoryEntry[]>([])
   const [plantingMode, setPlantingMode] = useState(false)
   const [pendingPlantCoords, setPendingPlantCoords] = useState<[number, number] | null>(null)
   const [toast, setToast] = useState<ToastState | null>(null)
@@ -137,6 +142,12 @@ function AppInner({ username, userId }: { username: string; userId: string }) {
     refreshRaids()
   }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Raid polling — check every 15s so incoming raids appear without refresh ─
+  useEffect(() => {
+    const id = setInterval(refreshRaids, 15_000)
+    return () => clearInterval(id)
+  }, [refreshRaids])
+
   // ── Markers ────────────────────────────────────────────────────────────────
   const markers = useMemo(
     () => (userLocation ? relocateMarkers(userLocation) : MARKERS),
@@ -164,21 +175,45 @@ function AppInner({ username, userId }: { username: string; userId: string }) {
   const handleBaseClick = useCallback((base: Base) => {
     setSelectedBase(base)
     setShowStash(false)
+    setShowBaseView(false)
+    setBaseRaids([])
   }, [])
-
-  const handleOpenStash = useCallback(async () => {
-    if (!selectedBase) return
-    const items = await getBaseStash(selectedBase.id)
-    setStashItems(items)
-    setShowStash(true)
-    setShowInventory(true)
-    setSelectedBase(null)
-  }, [selectedBase])
 
   const handleCloseStash = useCallback(() => {
     setShowStash(false)
     setStashItems([])
   }, [])
+
+  const handleOpenBaseView = useCallback(async () => {
+    if (!selectedBase) return
+    const [items, raids] = await Promise.all([
+      getBaseStash(selectedBase.id),
+      getBaseRaidHistory(selectedBase.id),
+    ])
+    setStashItems(items)
+    setBaseRaids(raids)
+    setShowBaseView(true)
+  }, [selectedBase])
+
+  const handleCloseBaseView = useCallback(() => {
+    setShowBaseView(false)
+    setSelectedBase(null)
+    setStashItems([])
+    setBaseRaids([])
+  }, [])
+
+  const handleBaseViewDeposit = useCallback(async (item: InventoryItem) => {
+    if (!selectedBase) return
+    try {
+      await depositToStash(selectedBase.id, item.id, userId, item.item_catalog_id, item.instance_data)
+      showToast(`${item.item.name} depositado no stash.`)
+      const updated = await getBaseStash(selectedBase.id)
+      setStashItems(updated)
+      await Promise.all([refreshInventory(), refreshPlayer()])
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Erro ao depositar.', 'error')
+    }
+  }, [selectedBase, userId, refreshInventory, refreshPlayer, showToast])
 
   const handleLootClick = useCallback(async (loot: LootSpawn) => {
     if (!player) return
@@ -276,6 +311,20 @@ function AppInner({ username, userId }: { username: string; userId: string }) {
     }
   }, [refreshRaids, showToast])
 
+  const handleBuySlot = useCallback(async (baseId?: string) => {
+    const targetId = baseId ?? selectedBase?.id
+    if (!targetId) return
+    try {
+      const newSlots = await buyStashSlot(targetId, userId)
+      showToast(`Slot comprado! Stash agora tem ${newSlots} slots.`)
+      await refreshBases()
+      setSelectedBase(prev => prev?.id === targetId ? { ...prev, stash_slots: newSlots } : prev)
+      await getPlayer(userId).then(p => p && setPlayer(p))
+    } catch (err: unknown) {
+      showToast(err instanceof Error ? err.message : 'Erro ao comprar slot.', 'error')
+    }
+  }, [selectedBase, userId, refreshBases, showToast])
+
   // Active raid on selected base (for BasePanel)
   const activeRaidOnSelected = selectedBase
     ? [...myRaids, ...incomingRaids].find(r => r.base_id === selectedBase.id && r.status === 'PENDENTE') ?? null
@@ -335,32 +384,51 @@ function AppInner({ username, userId }: { username: string; userId: string }) {
         )}
 
         {/* Stash panel — left side */}
-        {showStash && stashItems.length >= 0 && bases.find(b => b.id === stashItems[0]?.base_id) ? (
-          <StashPanel
-            base={bases.find(b => b.id === stashItems[0]?.base_id)!}
-            stashItems={stashItems}
-            onClose={handleCloseStash}
-            onWithdraw={showInventory ? handleWithdraw : undefined}
-          />
-        ) : showStash && player ? (
-          // Stash open but we need to find base differently (own base with stash)
-          <StashPanel
-            base={bases.find(b => b.owner_id === userId && b.status === 'ATIVA') ?? bases[0]}
-            stashItems={stashItems}
-            onClose={handleCloseStash}
-            onWithdraw={showInventory ? handleWithdraw : undefined}
-          />
-        ) : null}
+        {showStash && player && (() => {
+          const stashBase =
+            bases.find(b => b.id === stashItems[0]?.base_id) ??
+            bases.find(b => b.owner_id === userId && b.status === 'ATIVA') ??
+            bases[0]
+          if (!stashBase) return null
+          const isOwner = stashBase.owner_id === userId
+          return (
+            <StashPanel
+              base={stashBase}
+              stashItems={stashItems}
+              playerRad={player.rad_balance}
+              isOwner={isOwner}
+              onClose={handleCloseStash}
+              onWithdraw={showInventory ? handleWithdraw : undefined}
+              onBuySlot={isOwner ? () => handleBuySlot(stashBase.id) : undefined}
+            />
+          )
+        })()}
 
-        {/* Base info panel — bottom center */}
-        {selectedBase && (
+        {/* Base mini panel — bottom center — hidden when BaseView is open */}
+        {selectedBase && !showBaseView && (
           <BasePanel
             base={selectedBase}
             currentUserId={userId}
             activeRaid={activeRaidOnSelected}
             onClose={() => setSelectedBase(null)}
-            onOpenStash={handleOpenStash}
+            onOpenBaseView={handleOpenBaseView}
             onStartRaid={handleStartRaid}
+          />
+        )}
+
+        {/* BaseView — full detail panel */}
+        {showBaseView && selectedBase && player && (
+          <BaseView
+            base={selectedBase}
+            stashItems={stashItems}
+            inventory={inventory}
+            player={player}
+            isOwner={selectedBase.owner_id === userId}
+            raids={baseRaids}
+            onClose={handleCloseBaseView}
+            onWithdraw={selectedBase.owner_id === userId ? handleWithdraw : undefined}
+            onDeposit={selectedBase.owner_id === userId ? handleBaseViewDeposit : undefined}
+            onBuySlot={selectedBase.owner_id === userId ? () => handleBuySlot(selectedBase.id) : undefined}
           />
         )}
 

@@ -105,3 +105,7 @@ export interface Raid {
   attributes: Record<string, unknown>
   created_at: string
 }
+
+export interface RaidHistoryEntry extends Raid {
+  raider?: { username: string }
+}

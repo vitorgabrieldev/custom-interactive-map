@@ -1,0 +1,292 @@
+.base-view {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 480px;
+  background: rgba(9, 9, 9, 0.97);
+  border-right: 1px solid #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Courier New', Courier, monospace;
+  z-index: 26;
+  box-shadow: 4px 0 32px rgba(0, 0, 0, 0.95);
+  animation: slide-in-left 0.2s ease-out;
+}
+
+/* ── Header ─────────────────────────────────────────── */
+
+.base-view__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #1e1e1e;
+  flex-shrink: 0;
+}
+
+.base-view__header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.base-view__icon {
+  font-size: 16px;
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+
+.base-view__name {
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  color: #cccccc;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.base-view__status {
+  font-size: 9px;
+  letter-spacing: 2px;
+  padding: 2px 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.base-view__status--active {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+}
+
+.base-view__status--ruin {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.base-view__close {
+  background: none;
+  border: none;
+  color: #444444;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  line-height: 1;
+  transition: color 0.15s;
+  flex-shrink: 0;
+  margin-left: 10px;
+}
+
+.base-view__close:hover {
+  color: #cccccc;
+}
+
+/* ── Body (scrollable) ───────────────────────────────── */
+
+.base-view__body {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.base-view__body::-webkit-scrollbar {
+  width: 3px;
+}
+
+.base-view__body::-webkit-scrollbar-thumb {
+  background: #1e1e1e;
+  border-radius: 2px;
+}
+
+/* ── Section ─────────────────────────────────────────── */
+
+.base-view__section {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid #141414;
+}
+
+.base-view__section--last {
+  border-bottom: none;
+  flex: 1;
+}
+
+.base-view__section-title {
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: #444444;
+  margin-bottom: 12px;
+}
+
+.base-view__section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.base-view__section-count {
+  color: #555555;
+  font-size: 9px;
+  letter-spacing: 1px;
+}
+
+.base-view__section-hint {
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: #60a5fa;
+  opacity: 0.7;
+}
+
+.base-view__section-rad {
+  font-size: 10px;
+  color: #f59e0b;
+  letter-spacing: 0.5px;
+}
+
+.base-view__deposit-hint {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.05);
+  border: 1px solid rgba(74, 222, 128, 0.1);
+  border-radius: 2px;
+  padding: 5px 10px;
+  margin-bottom: 10px;
+}
+
+/* ── Info grid ───────────────────────────────────────── */
+
+.base-view__info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 10px 0;
+}
+
+.base-view__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.base-view__stat--wide {
+  grid-column: 1 / -1;
+}
+
+.base-view__stat-label {
+  font-size: 7px;
+  letter-spacing: 2px;
+  color: #3a3a3a;
+}
+
+.base-view__stat-value {
+  font-size: 11px;
+  color: #888888;
+  letter-spacing: 0.5px;
+}
+
+.base-view__stat-value--mono {
+  font-size: 10px;
+  color: #555555;
+}
+
+.base-view__stat-value--warn {
+  color: #ef4444;
+}
+
+/* ── Slot grid ───────────────────────────────────────── */
+
+.base-view__grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+/* ── Raid history ────────────────────────────────────── */
+
+.base-view__raids-empty {
+  font-size: 10px;
+  color: #333333;
+  letter-spacing: 0.5px;
+}
+
+.base-view__raids-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.base-view__raid-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.015);
+  border: 1px solid #181818;
+  border-radius: 2px;
+}
+
+.base-view__raid-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.base-view__raid-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.base-view__raid-status {
+  font-size: 8px;
+  letter-spacing: 1px;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.base-view__raid-status--pendente {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.base-view__raid-status--concluído {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.base-view__raid-status--cancelado {
+  color: #555555;
+  background: rgba(85, 85, 85, 0.08);
+  border: 1px solid rgba(85, 85, 85, 0.2);
+}
+
+.base-view__raid-status--defendido {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+}
+
+.base-view__raid-attacker {
+  font-size: 10px;
+  color: #666666;
+  letter-spacing: 0.5px;
+}
+
+.base-view__raid-items {
+  font-size: 9px;
+  color: #ef4444;
+  letter-spacing: 0.5px;
+}
+
+.base-view__raid-date {
+  font-size: 9px;
+  color: #333333;
+  letter-spacing: 0.5px;
+}

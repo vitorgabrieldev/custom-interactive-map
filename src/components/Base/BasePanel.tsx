@@ -9,7 +9,7 @@ interface BasePanelProps {
   currentUserId: string
   activeRaid: Raid | null
   onClose: () => void
-  onOpenStash: () => void
+  onOpenBaseView: () => Promise<void>
   onStartRaid: () => Promise<void>
 }
 
@@ -18,20 +18,22 @@ export function BasePanel({
   currentUserId,
   activeRaid,
   onClose,
-  onOpenStash,
+  onOpenBaseView,
   onStartRaid,
 }: BasePanelProps) {
   const [raiding, setRaiding] = useState(false)
+  const [opening, setOpening] = useState(false)
   const isOwn = base.owner_id === currentUserId
   const isRuin = base.status === 'RUÍNA'
 
   async function handleRaid() {
     setRaiding(true)
-    try {
-      await onStartRaid()
-    } finally {
-      setRaiding(false)
-    }
+    try { await onStartRaid() } finally { setRaiding(false) }
+  }
+
+  async function handleOpenBaseView() {
+    setOpening(true)
+    try { await onOpenBaseView() } finally { setOpening(false) }
   }
 
   const statusLabel = { ATIVA: 'ATIVA', RUÍNA: 'RUÍNA', DESTRUÍDA: 'DESTRUÍDA' }[base.status]
@@ -60,53 +62,39 @@ export function BasePanel({
           <span className="base-panel__info-label">NÍVEL</span>
           <span className="base-panel__info-value">{base.level}</span>
         </div>
-        {isOwn && (
-          <div className="base-panel__info-row">
-            <span className="base-panel__info-label">CUSTO</span>
-            <span className="base-panel__info-value">{base.daily_cost} RAD/dia</span>
-          </div>
-        )}
-        {isRuin && base.ruin_at && (
-          <div className="base-panel__info-row">
-            <span className="base-panel__info-label">RUÍNA</span>
-            <span className="base-panel__info-value base-panel__info-value--warn">
-              {formatDate(base.ruin_at)}
-            </span>
-          </div>
-        )}
+        <div className="base-panel__info-row">
+          <span className="base-panel__info-label">STASH</span>
+          <span className="base-panel__info-value">{base.stash_slots} slots</span>
+        </div>
       </div>
 
       <div className="base-panel__actions">
-        {isOwn ? (
-          <button className="base-panel__action-btn base-panel__action-btn--stash" onClick={onOpenStash}>
-            ▣ ABRIR STASH
-          </button>
-        ) : activeRaid ? (
-          <div className="base-panel__raid-active">
-            <span className="base-panel__raid-active-icon">⚔</span>
-            Raid em andamento
-          </div>
-        ) : !isRuin ? (
-          <button
-            className="base-panel__action-btn base-panel__action-btn--raid"
-            onClick={handleRaid}
-            disabled={raiding}
-          >
-            {raiding ? 'INICIANDO...' : '⚔ INVADIR · 5H'}
-          </button>
-        ) : (
-          <button className="base-panel__action-btn base-panel__action-btn--loot" onClick={onOpenStash}>
-            💀 SAQUEAR RUÍNA
-          </button>
+        {!isOwn && !isRuin && (
+          activeRaid ? (
+            <div className="base-panel__raid-active">
+              <span className="base-panel__raid-active-icon">⚔</span>
+              Raid em andamento
+            </div>
+          ) : (
+            <button
+              className="base-panel__action-btn base-panel__action-btn--raid"
+              onClick={handleRaid}
+              disabled={raiding}
+            >
+              {raiding ? 'INICIANDO...' : '⚔ INVADIR · 1H'}
+            </button>
+          )
         )}
+        <button
+          className="base-panel__action-btn base-panel__action-btn--view"
+          onClick={handleOpenBaseView}
+          disabled={opening}
+        >
+          {opening ? 'ABRINDO...' : '⊞ VISUALIZAR BASE'}
+        </button>
       </div>
     </div>
   )
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
 // ── BasePlantModal ─────────────────────────────────────────────────────────────
@@ -165,7 +153,7 @@ export function BasePlantModal({ coords, onConfirm, onCancel }: BasePlantModalPr
 
           <div className="plant-modal__cost-row">
             <span className="plant-modal__cost-label">CUSTO</span>
-            <span className="plant-modal__cost-value">◈ 50 RAD</span>
+            <span className="plant-modal__cost-value">◈ 250 RAD</span>
           </div>
 
           <div className="plant-modal__buttons">

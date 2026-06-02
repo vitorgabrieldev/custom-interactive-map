@@ -12,6 +12,7 @@ createRoot(document.getElementById('root')!).render(
       id="gta-map-global"
       initialPresence={{
         cursor: null,
+        walkPos: null,
         selectedMarkerId: null,
         name: identity.name,
         color: identity.color,

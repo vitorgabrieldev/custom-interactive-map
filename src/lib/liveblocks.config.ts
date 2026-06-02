@@ -3,6 +3,7 @@ import { createRoomContext } from '@liveblocks/react'
 
 export type Presence = {
   cursor: { lng: number; lat: number } | null
+  walkPos: { lng: number; lat: number } | null
   selectedMarkerId: string | null
   name: string
   color: string
