@@ -118,9 +118,6 @@ export function BaseView({
                 STASH
                 <span className="base-view__section-count"> · {stashItems.length}/{base.stash_slots}</span>
               </span>
-              {onWithdraw && (
-                <span className="base-view__section-hint">↓ clique para retirar</span>
-              )}
             </div>
             <div className="base-view__grid">
               {stashCells.map((cell, _i) => {
@@ -196,9 +193,6 @@ export function BaseView({
               </span>
               <span className="base-view__section-rad">◈ {player.rad_balance} RAD</span>
             </div>
-            {onDeposit && (
-              <div className="base-view__deposit-hint">⊕ clique para depositar no stash</div>
-            )}
             <div className="base-view__grid">
               {Array.from({ length: player.inventory_slots }, (_, i) => {
                 const item = inventory[i]
