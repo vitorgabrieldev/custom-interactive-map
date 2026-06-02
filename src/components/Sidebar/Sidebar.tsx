@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { CATEGORIES, type MapMarker, type MarkerCategory } from '../../data/markers'
 import { useSelf, useOthersMapped } from '../../lib/liveblocks.config'
+import { signOut } from '../../lib/supabase'
 import './Sidebar.css'
 
 interface SidebarProps {
+  username: string
   activeCategories: Set<MarkerCategory>
   markers: MapMarker[]
   selectedMarker: MapMarker | null
@@ -12,6 +14,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({
+  username,
   activeCategories,
   markers,
   selectedMarker,
@@ -46,7 +49,17 @@ export function Sidebar({
           <div className="sidebar__header">
             <div className="sidebar__logo">
               <span className="sidebar__logo-icon">◈</span>
-              <span className="sidebar__logo-text">GTA MAP</span>
+              <span className="sidebar__logo-text">Sobreviva!</span>
+            </div>
+            <div className="sidebar__user">
+              <span className="sidebar__user-name">{username.toUpperCase()}</span>
+              <button
+                className="sidebar__signout"
+                title="Sair"
+                onClick={() => signOut()}
+              >
+                ⏻
+              </button>
             </div>
           </div>
 

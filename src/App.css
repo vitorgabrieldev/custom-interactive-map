@@ -282,7 +282,7 @@ html, body, #root {
   100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; }
 }
 
-/* ── Remote cursors ──────────────────────────────────── */
+/* ── Remote cursors (GTA5 navigation arrow) ──────────── */
 
 .remote-cursor {
   pointer-events: none;
@@ -290,15 +290,6 @@ html, body, #root {
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
-  z-index: 200;
-}
-
-.remote-cursor__dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(0, 0, 0, 0.5);
-  flex-shrink: 0;
 }
 
 .remote-cursor__name {
@@ -306,8 +297,9 @@ html, body, #root {
   font-size: 10px;
   letter-spacing: 0.5px;
   white-space: nowrap;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.6);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.7);
   line-height: 1;
+  margin-left: 2px;
 }
 
 /* ── Popup other user line ───────────────────────────── */

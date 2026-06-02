@@ -16,7 +16,6 @@
 .sidebar--collapsed {
   width: 0;
   min-width: 0;
-  overflow: hidden;
 }
 
 .sidebar__toggle {
@@ -66,6 +65,36 @@
   font-weight: 700;
   letter-spacing: 4px;
   color: #c0c0c0;
+}
+
+.sidebar__user {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #181818;
+}
+
+.sidebar__user-name {
+  font-size: 9px;
+  letter-spacing: 2.5px;
+  color: #555555;
+}
+
+.sidebar__signout {
+  background: none;
+  border: none;
+  color: #333333;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+  transition: color 0.15s;
+}
+
+.sidebar__signout:hover {
+  color: #8b2020;
 }
 
 .sidebar__section {

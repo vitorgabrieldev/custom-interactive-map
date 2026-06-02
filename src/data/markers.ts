@@ -1,10 +1,10 @@
 export type MarkerCategory =
-  | 'weapons'
-  | 'vehicles'
-  | 'missions'
-  | 'safehouses'
-  | 'services'
-  | 'events'
+  | 'outpost'
+  | 'shelter'
+  | 'danger'
+  | 'supply'
+  | 'medical'
+  | 'signal'
 
 export interface MapMarker {
   id: string
@@ -12,92 +12,91 @@ export interface MapMarker {
   description: string
   category: MarkerCategory
   coordinates: [number, number] // [lng, lat]
+  radius?: number // infection zone radius in km (danger markers only)
 }
 
 export const CATEGORIES: Record<MarkerCategory, { label: string; color: string; icon: string }> = {
-  weapons:    { label: 'Armas',    color: '#aaaaaa', icon: '🔫' },
-  vehicles:   { label: 'Veículos', color: '#cccccc', icon: '🚗' },
-  missions:   { label: 'Missões',  color: '#e0e0e0', icon: '⭐' },
-  safehouses: { label: 'Abrigos',  color: '#777777', icon: '🏠' },
-  services:   { label: 'Serviços', color: '#999999', icon: '🔧' },
-  events:     { label: 'Eventos',  color: '#bbbbbb', icon: '❗' },
+  outpost: { label: 'Posto Avançado',  color: '#888888', icon: '▲' },
+  shelter: { label: 'Abrigo',          color: '#888888', icon: '⌂' },
+  danger:  { label: 'Zona Infectada',  color: '#888888', icon: '✕' },
+  supply:  { label: 'Suprimentos',     color: '#888888', icon: '◈' },
+  medical: { label: 'Médico',          color: '#888888', icon: '✚' },
+  signal:  { label: 'Sinal / Rádio',   color: '#888888', icon: '◎' },
 }
 
-// Base center used to calculate relative offsets for each marker.
-// When the user's geolocation is known, markers are relocated around it.
 export const BASE_CENTER: [number, number] = [-46.633, -23.55]
 
-// Coordinates stored as offsets from BASE_CENTER so they stay relative
-// to whatever center we end up using (user's location).
 const OFFSETS: Array<Omit<MapMarker, 'coordinates'> & { offset: [number, number] }> = [
   {
     id: '1',
-    name: 'Loja de Armas - Centro',
-    description: 'Armamento completo disponível 24h',
-    category: 'weapons',
+    name: 'Posto Avançado Central',
+    description: 'Grupo de sobreviventes — 12 pessoas',
+    category: 'outpost',
     offset: [0, 0],
   },
   {
     id: '2',
-    name: 'Oficina Mecânica',
-    description: 'Reparos e modificações de veículos',
-    category: 'vehicles',
+    name: 'Abrigo Subterrâneo',
+    description: 'Bunker com suprimentos para 30 dias',
+    category: 'shelter',
     offset: [-0.022, -0.015],
   },
   {
     id: '3',
-    name: 'Missão: O Grande Roubo',
-    description: 'Nível recomendado: 15+',
-    category: 'missions',
-    offset: [-0.007, 0.005],
+    name: 'Zona Infectada Norte',
+    description: 'PERIGO — Alta concentração de infectados',
+    category: 'danger',
+    offset: [-0.007, 0.018],
+    radius: 1.2,
   },
   {
     id: '4',
-    name: 'Abrigo Seguro - Norte',
-    description: 'Save point e armazenamento',
-    category: 'safehouses',
-    offset: [0.008, 0.015],
+    name: 'Depósito de Suprimentos',
+    description: 'Comida, água e equipamentos',
+    category: 'supply',
+    offset: [0.013, -0.02],
   },
   {
     id: '5',
-    name: 'Hospital Central',
-    description: 'Recuperação total: $500',
-    category: 'services',
+    name: 'Posto Médico',
+    description: 'Médico disponível — antibióticos em estoque',
+    category: 'medical',
     offset: [-0.015, -0.008],
   },
   {
     id: '6',
-    name: 'Evento: Corrida Noturna',
-    description: 'Todo sábado às 22h',
-    category: 'events',
+    name: 'Torre de Rádio',
+    description: 'Sinal ativo — frequência 89.3 FM',
+    category: 'signal',
     offset: [-0.027, 0.002],
   },
   {
     id: '7',
-    name: 'Depósito de Armas',
-    description: 'Item raro: Sniper disponível',
-    category: 'weapons',
-    offset: [0.013, -0.02],
+    name: 'Acampamento Leste',
+    description: 'Posto de vigilância — 4 sentinelas',
+    category: 'outpost',
+    offset: [0.008, 0.015],
   },
   {
     id: '8',
-    name: 'Porto de Veículos',
-    description: 'Barcos e motos aquáticas',
-    category: 'vehicles',
+    name: 'Abrigo Costeiro',
+    description: 'Embarcações disponíveis para fuga',
+    category: 'shelter',
     offset: [-0.037, -0.01],
   },
   {
     id: '9',
-    name: 'Missão: Perseguição',
-    description: 'Recompensa: $10.000',
-    category: 'missions',
+    name: 'Zona Morta Sul',
+    description: 'BLOQUEADO — Passagem comprometida',
+    category: 'danger',
     offset: [0.003, -0.025],
+    radius: 0.85,
   },
   {
     id: '10',
-    name: 'Abrigo - Zona Sul',
-    description: 'Garagem para 3 veículos',
-    category: 'safehouses',
+    name: 'Cache de Recursos',
+    description: 'Armamento e mantimentos escondidos',
+    category: 'supply',
     offset: [-0.012, -0.03],
   },
 ]
