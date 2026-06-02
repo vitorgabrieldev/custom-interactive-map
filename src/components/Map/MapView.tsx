@@ -7,6 +7,8 @@ import { BRAZIL_CITIES } from '../../data/cities'
 import { ALL_CITY_MARKERS } from '../../data/cityMarkers'
 import { generateZonePolygon, hashStr } from '../../lib/zonePolygon'
 import { useUpdateMyPresence, useOthers, useOthersMapped } from '../../lib/liveblocks.config'
+import type { Base, LootSpawn } from '../../types/game'
+import { RARITY_COLORS } from '../../lib/game'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -27,6 +29,13 @@ interface MapViewProps {
   selectedMarker: MapMarker | null
   onMarkerClick: (marker: MapMarker | null) => void
   userLocation: [number, number] | null
+  bases: Base[]
+  lootSpawns: LootSpawn[]
+  currentUserId: string
+  onBaseClick: (base: Base) => void
+  onLootClick: (loot: LootSpawn) => void
+  onMapClick?: (lng: number, lat: number) => void
+  plantingMode?: boolean
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -36,6 +45,14 @@ const MARKERS_SRC      = 'markers-src'
 const CITIES_SRC       = 'cities-src'
 const CITY_MARKERS_SRC = 'city-markers-src'
 const ZONES_SRC        = 'zones-src'
+const BASES_SRC        = 'bases-src'
+const LOOT_SRC         = 'loot-src'
+const PLAYER_SRC       = 'player-src'
+
+const WALK_SPEED   = 0.000030
+const SPRINT_SPEED = 0.000070
+
+const RARITY_SLUGS = ['NORMAL', 'INCOMUM', 'RARO', 'LENDÁRIO', 'ÚNICO', 'ARTEFATO']
 
 // Pin canvas dimensions
 const PIN_W   = 30
@@ -210,6 +227,141 @@ function makePinIcon(
   return { width: W, height: H, data: d.data }
 }
 
+// ── Base pin icon ─────────────────────────────────────────────────────────────
+
+function makeBasePin(
+  type: 'own' | 'other' | 'ruin',
+): { width: number; height: number; data: Uint8ClampedArray } {
+  const W = 34, H = 34
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  ctx.clearRect(0, 0, W, H)
+  const cx = W / 2, cy = H / 2, size = 12
+
+  const palette = {
+    own:   { border: '#f59e0b', fill: '#150f00', symbol: '#f59e0b' },
+    other: { border: '#ea7c1a', fill: '#120a00', symbol: '#ea7c1a' },
+    ruin:  { border: '#7f2020', fill: '#1a0d0d', symbol: '#6b2222' },
+  }
+  const c = palette[type]
+
+  const diamond = () => {
+    ctx.beginPath()
+    ctx.moveTo(cx, cy - size - 2)
+    ctx.lineTo(cx + size + 2, cy)
+    ctx.lineTo(cx, cy + size + 2)
+    ctx.lineTo(cx - size - 2, cy)
+    ctx.closePath()
+  }
+
+  ctx.save()
+  ctx.shadowColor = type === 'own' ? 'rgba(245,158,11,0.6)' : 'rgba(0,0,0,0.6)'
+  ctx.shadowBlur = type === 'own' ? 12 : 8
+  diamond(); ctx.fillStyle = c.fill; ctx.fill()
+  ctx.restore()
+
+  diamond()
+  ctx.fillStyle = c.fill
+  ctx.fill()
+  ctx.strokeStyle = c.border
+  ctx.lineWidth = type === 'own' ? 2.5 : 1.8
+  ctx.stroke()
+
+  ctx.font = '13px monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = c.symbol
+  ctx.fillText(type === 'ruin' ? '✕' : '⌂', cx, cy + 1)
+
+  return { width: W, height: H, data: ctx.getImageData(0, 0, W, H).data }
+}
+
+// ── Loot pin icon ─────────────────────────────────────────────────────────────
+
+function makeLootPin(raritySlug: string): { width: number; height: number; data: Uint8ClampedArray } {
+  const color = RARITY_COLORS[raritySlug] ?? '#9ca3af'
+  const W = 22, H = 22
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  ctx.clearRect(0, 0, W, H)
+  const cx = W / 2, cy = H / 2, r = 8
+
+  ctx.save()
+  ctx.shadowColor = color; ctx.shadowBlur = 10
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.fillStyle = '#0d0d0d'; ctx.fill()
+  ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.stroke()
+  ctx.restore()
+
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.fillStyle = '#0d0d0d'; ctx.fill()
+  ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.stroke()
+
+  ctx.font = '10px monospace'
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillStyle = color
+  ctx.fillText('★', cx, cy + 0.5)
+
+  return { width: W, height: H, data: ctx.getImageData(0, 0, W, H).data }
+}
+
+// ── GeoJSON builders ─────────────────────────────────────────────────────────
+
+function buildBasesGeoJSON(bases: Base[], currentUserId: string): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: bases.map((b) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [b.lng, b.lat] },
+      properties: {
+        id: b.id,
+        name: b.name,
+        status: b.status,
+        level: b.level,
+        isOwn: b.owner_id === currentUserId ? 1 : 0,
+        owner_username: b.owner_username ?? '',
+      },
+    })),
+  }
+}
+
+function buildLootGeoJSON(loot: LootSpawn[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: loot.map((l) => ({
+      type: 'Feature' as const,
+      geometry: { type: 'Point' as const, coordinates: [l.lng, l.lat] },
+      properties: {
+        id: l.id,
+        item_name: l.item?.name ?? '?',
+        rarity_slug: l.item?.rarity?.slug ?? 'NORMAL',
+        icon: l.item?.icon ?? '★',
+        spawn_reason: l.spawn_reason,
+      },
+    })),
+  }
+}
+
+function buildPlayerGeoJSON(center: [number, number]): GeoJSON.FeatureCollection {
+  const r = 0.000028 // ~3m radius
+  const pts = 20
+  const ring = Array.from({ length: pts }, (_, i) => {
+    const a = (i / pts) * Math.PI * 2
+    return [center[0] + Math.cos(a) * r, center[1] + Math.sin(a) * r] as [number, number]
+  })
+  ring.push(ring[0])
+  return {
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [ring] }, properties: {} }],
+  }
+}
+
+function emptyGeoJSON(): GeoJSON.FeatureCollection {
+  return { type: 'FeatureCollection', features: [] }
+}
+
 // ── Other helpers ─────────────────────────────────────────────────────────────
 
 function createArrowEl(name: string, color: string): HTMLElement {
@@ -304,6 +456,13 @@ export function MapView({
   selectedMarker,
   onMarkerClick,
   userLocation,
+  bases,
+  lootSpawns,
+  currentUserId,
+  onBaseClick,
+  onLootClick,
+  onMapClick,
+  plantingMode = false,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
@@ -314,6 +473,18 @@ export function MapView({
   const userLocationRef = useRef<[number, number] | null>(null)
   const markersRef = useRef<MapMarker[]>(markers)
   const onClickRef = useRef(onMarkerClick)
+  const basesRef = useRef<Base[]>(bases)
+  const lootRef = useRef<LootSpawn[]>(lootSpawns)
+  const currentUserIdRef = useRef(currentUserId)
+  const onBaseClickRef = useRef(onBaseClick)
+  const onLootClickRef = useRef(onLootClick)
+  const onMapClickRef = useRef(onMapClick)
+  const plantingModeRef = useRef(plantingMode)
+
+  // Walk refs
+  const walkPosRef  = useRef<[number, number] | null>(null)
+  const walkKeysRef = useRef({ w: false, a: false, s: false, d: false, q: false, e: false, shift: false })
+  const walkAnimRef = useRef<number | null>(null)
 
   const [mapLoaded, setMapLoaded] = useState(false)
   const [routeInfo, setRouteInfo] = useState<RouteInfo | null>(null)
@@ -350,6 +521,13 @@ export function MapView({
   useEffect(() => { userLocationRef.current = userLocation }, [userLocation])
   useEffect(() => { markersRef.current = markers }, [markers])
   useEffect(() => { onClickRef.current = onMarkerClick }, [onMarkerClick])
+  useEffect(() => { basesRef.current = bases }, [bases])
+  useEffect(() => { lootRef.current = lootSpawns }, [lootSpawns])
+  useEffect(() => { currentUserIdRef.current = currentUserId }, [currentUserId])
+  useEffect(() => { onBaseClickRef.current = onBaseClick }, [onBaseClick])
+  useEffect(() => { onLootClickRef.current = onLootClick }, [onLootClick])
+  useEffect(() => { onMapClickRef.current = onMapClick }, [onMapClick])
+  useEffect(() => { plantingModeRef.current = plantingMode }, [plantingMode])
 
   // ── Map initialization ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -358,10 +536,12 @@ export function MapView({
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: GTA_STYLE,
-      center: [-47.9, -15.8],
-      zoom: 5,
+      center: [-51.1696, -23.3045],
+      zoom: 14,
+      pitch: 55,
+      maxPitch: 85,
       attributionControl: false,
-      maxZoom: 18,
+      maxZoom: 20,
       minZoom: 3,
     })
 
@@ -375,6 +555,16 @@ export function MapView({
       for (const cat of Object.keys(CATEGORIES) as MarkerCategory[]) {
         map.addImage(`pin-${cat}`,     makePinIcon(cat, false) as Parameters<typeof map.addImage>[1])
         map.addImage(`pin-${cat}-sel`, makePinIcon(cat, true)  as Parameters<typeof map.addImage>[1])
+      }
+
+      // Register base pin images
+      map.addImage('base-own',   makeBasePin('own')   as Parameters<typeof map.addImage>[1])
+      map.addImage('base-other', makeBasePin('other') as Parameters<typeof map.addImage>[1])
+      map.addImage('base-ruin',  makeBasePin('ruin')  as Parameters<typeof map.addImage>[1])
+
+      // Register loot pin images (one per rarity)
+      for (const slug of RARITY_SLUGS) {
+        map.addImage(`loot-${slug}`, makeLootPin(slug) as Parameters<typeof map.addImage>[1])
       }
 
       // ── 1. Infection zones — rendered below all markers ────────────────────
@@ -531,7 +721,92 @@ export function MapView({
         },
       })
 
-      // ── 5. Route ───────────────────────────────────────────────────────────
+      // ── 5. Bases ───────────────────────────────────────────────────────────
+      map.addSource(BASES_SRC, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      })
+
+      // Glow ring for own base
+      map.addLayer({
+        id: 'bases-own-glow',
+        type: 'circle',
+        source: BASES_SRC,
+        filter: ['==', ['get', 'isOwn'], 1],
+        paint: {
+          'circle-radius': 20,
+          'circle-color': 'transparent',
+          'circle-stroke-width': 0,
+          'circle-opacity': 0,
+          'circle-blur': 1,
+        },
+      })
+
+      map.addLayer({
+        id: 'bases-blip',
+        type: 'symbol',
+        source: BASES_SRC,
+        layout: {
+          'icon-image': [
+            'case',
+            ['==', ['get', 'status'], 'RUÍNA'], 'base-ruin',
+            ['==', ['get', 'isOwn'], 1], 'base-own',
+            'base-other',
+          ],
+          'icon-anchor': 'center',
+          'icon-size': 0.9,
+          'icon-allow-overlap': true,
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+          'text-size': 10,
+          'text-anchor': 'top',
+          'text-offset': [0, 1.2],
+          'text-optional': true,
+          'text-allow-overlap': false,
+        },
+        paint: {
+          'text-color': [
+            'case',
+            ['==', ['get', 'status'], 'RUÍNA'], '#7f2020',
+            ['==', ['get', 'isOwn'], 1], '#f59e0b',
+            '#ea7c1a',
+          ],
+          'text-halo-color': '#0d0d0d',
+          'text-halo-width': 2,
+        },
+      })
+
+      // ── 6. Loot spawns ────────────────────────────────────────────────────
+      map.addSource(LOOT_SRC, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      })
+
+      map.addLayer({
+        id: 'loot-blip',
+        type: 'symbol',
+        source: LOOT_SRC,
+        layout: {
+          'icon-image': ['concat', 'loot-', ['get', 'rarity_slug']],
+          'icon-anchor': 'center',
+          'icon-size': 1.0,
+          'icon-allow-overlap': true,
+          'text-field': ['get', 'item_name'],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+          'text-size': 9,
+          'text-anchor': 'top',
+          'text-offset': [0, 1.0],
+          'text-optional': true,
+          'text-allow-overlap': false,
+        },
+        paint: {
+          'text-color': '#888888',
+          'text-halo-color': '#0d0d0d',
+          'text-halo-width': 1.5,
+        },
+      })
+
+      // ── 7. Route ───────────────────────────────────────────────────────────
       map.addSource(ROUTE_SRC, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
@@ -546,6 +821,38 @@ export function MapView({
         paint: { 'line-color': '#e9d5ff', 'line-width': 1.5, 'line-dasharray': [4, 6], 'line-opacity': 0.6 },
         layout: { 'line-cap': 'butt' } })
 
+      // ── 8. Player 3D (walk mode) ──────────────────────────────────────────
+      map.addSource(PLAYER_SRC, {
+        type: 'geojson',
+        data: emptyGeoJSON(),
+      })
+
+      // Glow ring at ground level
+      map.addLayer({
+        id: 'player-glow',
+        type: 'fill-extrusion',
+        source: PLAYER_SRC,
+        paint: {
+          'fill-extrusion-color': '#f59e0b',
+          'fill-extrusion-height': 0.3,
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 0.35,
+        },
+      })
+
+      // Player body — amber cylinder
+      map.addLayer({
+        id: 'player-3d',
+        type: 'fill-extrusion',
+        source: PLAYER_SRC,
+        paint: {
+          'fill-extrusion-color': '#f59e0b',
+          'fill-extrusion-height': 1.9,
+          'fill-extrusion-base': 0,
+          'fill-extrusion-opacity': 1,
+        },
+      })
+
       setMapLoaded(true)
     })
 
@@ -556,11 +863,29 @@ export function MapView({
     map.on('mouseleave', () => { updatePresenceRef.current({ cursor: null }) })
 
     // ── Click handlers ───────────────────────────────────────────────────────
-    let justClickedMarker = false
+    let justClickedSpecial = false
+
+    // Base markers
+    map.on('click', 'bases-blip', (e) => {
+      justClickedSpecial = true
+      if (!e.features?.length) return
+      const props = e.features[0].properties as { id: string }
+      const base = basesRef.current.find(b => b.id === props.id)
+      if (base) onBaseClickRef.current(base)
+    })
+
+    // Loot markers
+    map.on('click', 'loot-blip', (e) => {
+      justClickedSpecial = true
+      if (!e.features?.length) return
+      const props = e.features[0].properties as { id: string }
+      const loot = lootRef.current.find(l => l.id === props.id)
+      if (loot) onLootClickRef.current(loot)
+    })
 
     // Custom user markers
     map.on('click', 'markers-blip', (e) => {
-      justClickedMarker = true
+      justClickedSpecial = true
       if (!e.features?.length) return
       const props = e.features[0].properties as {
         id: string; name: string; description: string; category: MarkerCategory;
@@ -596,7 +921,7 @@ export function MapView({
 
     // City detail markers (informational popup, no presence sync)
     map.on('click', 'city-markers-blip', (e) => {
-      justClickedMarker = true
+      justClickedSpecial = true
       if (!e.features?.length) return
       const props = e.features[0].properties as {
         id: string; name: string; description: string; category: MarkerCategory;
@@ -623,20 +948,28 @@ export function MapView({
         .addTo(map)
     })
 
-    // General click — close popup and deselect
-    map.on('click', () => {
-      if (!justClickedMarker) {
-        activePopupRef.current?.remove()
-        activePopupRef.current = null
-        onClickRef.current(null)
+    // General click — close popup, deselect, or place base
+    map.on('click', (e) => {
+      if (!justClickedSpecial) {
+        if (plantingModeRef.current) {
+          onMapClickRef.current?.(e.lngLat.lng, e.lngLat.lat)
+        } else {
+          activePopupRef.current?.remove()
+          activePopupRef.current = null
+          onClickRef.current(null)
+        }
       }
-      justClickedMarker = false
+      justClickedSpecial = false
     })
 
     map.on('mouseenter', 'markers-blip',      () => { map.getCanvas().style.cursor = 'pointer' })
     map.on('mouseleave', 'markers-blip',      () => { map.getCanvas().style.cursor = '' })
     map.on('mouseenter', 'city-markers-blip', () => { map.getCanvas().style.cursor = 'pointer' })
     map.on('mouseleave', 'city-markers-blip', () => { map.getCanvas().style.cursor = '' })
+    map.on('mouseenter', 'bases-blip',        () => { map.getCanvas().style.cursor = 'pointer' })
+    map.on('mouseleave', 'bases-blip',        () => { map.getCanvas().style.cursor = '' })
+    map.on('mouseenter', 'loot-blip',         () => { map.getCanvas().style.cursor = 'pointer' })
+    map.on('mouseleave', 'loot-blip',         () => { map.getCanvas().style.cursor = '' })
 
     // ── Double-click → route ────────────────────────────────────────────────
     map.on('dblclick', async (e) => {
@@ -697,6 +1030,22 @@ export function MapView({
       ?.setData(buildZonesGeoJSON(markers, activeCategories))
   }, [markers, activeCategories, mapLoaded])
 
+  // ── Update bases GeoJSON ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapLoaded) return
+    ;(map.getSource(BASES_SRC) as maplibregl.GeoJSONSource | undefined)
+      ?.setData(buildBasesGeoJSON(bases, currentUserId))
+  }, [bases, currentUserId, mapLoaded])
+
+  // ── Update loot GeoJSON ──────────────────────────────────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapLoaded) return
+    ;(map.getSource(LOOT_SRC) as maplibregl.GeoJSONSource | undefined)
+      ?.setData(buildLootGeoJSON(lootSpawns))
+  }, [lootSpawns, mapLoaded])
+
   // ── Sync city markers category filter ───────────────────────────────────────
   useEffect(() => {
     const map = mapRef.current
@@ -722,7 +1071,11 @@ export function MapView({
     userMarkerRef.current = new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat(userLocation)
       .addTo(map)
-    map.flyTo({ center: userLocation, zoom: 14, duration: 1800 })
+    // Place player at detected location and keep 3D pitch
+    walkPosRef.current = userLocation
+    ;(map.getSource(PLAYER_SRC) as maplibregl.GeoJSONSource | undefined)
+      ?.setData(buildPlayerGeoJSON(userLocation))
+    map.flyTo({ center: userLocation, zoom: 15, pitch: 55, duration: 1800 })
   }, [userLocation])
 
   // ── Remote cursors (update position only, no recreation) ───────────────────
@@ -760,6 +1113,87 @@ export function MapView({
     map.flyTo({ center: selectedMarker.coordinates, zoom: Math.max(map.getZoom(), 14), duration: 700 })
   }, [selectedMarker])
 
+  // ── WASD always active: keyboard listeners ───────────────────────────────────
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return
+      const k = walkKeysRef.current
+      if (e.code === 'KeyW' || e.code === 'ArrowUp')    { k.w = true; e.preventDefault() }
+      if (e.code === 'KeyS' || e.code === 'ArrowDown')  { k.s = true; e.preventDefault() }
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft')  { k.a = true; e.preventDefault() }
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') { k.d = true; e.preventDefault() }
+      if (e.code === 'KeyQ') { k.q = true; e.preventDefault() }
+      if (e.code === 'KeyE') { k.e = true; e.preventDefault() }
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') k.shift = true
+    }
+    const onUp = (e: KeyboardEvent) => {
+      const k = walkKeysRef.current
+      if (e.code === 'KeyW' || e.code === 'ArrowUp')    k.w = false
+      if (e.code === 'KeyS' || e.code === 'ArrowDown')  k.s = false
+      if (e.code === 'KeyA' || e.code === 'ArrowLeft')  k.a = false
+      if (e.code === 'KeyD' || e.code === 'ArrowRight') k.d = false
+      if (e.code === 'KeyQ') k.q = false
+      if (e.code === 'KeyE') k.e = false
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') k.shift = false
+    }
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    return () => {
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup', onUp)
+      walkKeysRef.current = { w: false, a: false, s: false, d: false, q: false, e: false, shift: false }
+    }
+  }, [])
+
+  // ── Walk RAF loop: always running when map is loaded ─────────────────────────
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !mapLoaded) return
+
+    // Init player at map center
+    const initC = map.getCenter()
+    const initPos: [number, number] = [initC.lng, initC.lat]
+    walkPosRef.current = initPos
+    ;(map.getSource(PLAYER_SRC) as maplibregl.GeoJSONSource | undefined)
+      ?.setData(buildPlayerGeoJSON(initPos))
+
+    const tick = () => {
+      const m = mapRef.current
+      if (!m) return
+      const keys = walkKeysRef.current
+
+      if (keys.q) m.setBearing(m.getBearing() - 2.2)
+      if (keys.e) m.setBearing(m.getBearing() + 2.2)
+
+      if (keys.w || keys.a || keys.s || keys.d) {
+        const rad = (m.getBearing() * Math.PI) / 180
+        const spd = keys.shift ? SPRINT_SPEED : WALK_SPEED
+        let dLng = 0, dLat = 0
+        if (keys.w) { dLng += Math.sin(rad) * spd; dLat += Math.cos(rad) * spd }
+        if (keys.s) { dLng -= Math.sin(rad) * spd; dLat -= Math.cos(rad) * spd }
+        if (keys.a) { dLng -= Math.cos(rad) * spd; dLat += Math.sin(rad) * spd }
+        if (keys.d) { dLng += Math.cos(rad) * spd; dLat -= Math.sin(rad) * spd }
+
+        const cur = walkPosRef.current
+        if (cur) {
+          const newPos: [number, number] = [cur[0] + dLng, cur[1] + dLat]
+          walkPosRef.current = newPos
+          ;(m.getSource(PLAYER_SRC) as maplibregl.GeoJSONSource | undefined)
+            ?.setData(buildPlayerGeoJSON(newPos))
+          m.setCenter(newPos)
+        }
+      }
+
+      walkAnimRef.current = requestAnimationFrame(tick)
+    }
+
+    walkAnimRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (walkAnimRef.current) cancelAnimationFrame(walkAnimRef.current)
+    }
+  }, [mapLoaded])
+
   const clearRoute = useCallback(() => {
     const map = mapRef.current
     if (!map) return
@@ -795,6 +1229,18 @@ export function MapView({
       {isRouting && <div className="routing-loading">CALCULANDO ROTA...</div>}
       {mapLoaded && !routeInfo && userLocation && (
         <div className="map-hint">DUPLO CLIQUE PARA TRAÇAR ROTA</div>
+      )}
+
+      {mapLoaded && (
+        <div className="walk-hint">
+          <span className="walk-hint__key">W A S D</span> MOVER
+          <span className="walk-hint__sep">·</span>
+          <span className="walk-hint__key">Q E</span> GIRAR
+          <span className="walk-hint__sep">·</span>
+          <span className="walk-hint__key">SHIFT</span> CORRER
+          <span className="walk-hint__sep">·</span>
+          <span className="walk-hint__key">DRAG</span> CÂMERA
+        </div>
       )}
     </div>
   )

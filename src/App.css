@@ -23,6 +23,10 @@ html, body, #root {
   overflow: hidden;
 }
 
+.app__map--planting .maplibregl-canvas-container {
+  cursor: crosshair !important;
+}
+
 /* ── MapLibre overrides ─────────────────────────────── */
 
 .maplibregl-canvas-container {
@@ -308,6 +312,76 @@ html, body, #root {
   font-size: 10px;
   margin-top: 6px;
   letter-spacing: 0.5px;
+}
+
+/* ── Toast notifications ─────────────────────────────── */
+
+.game-toast {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  padding: 8px 18px;
+  border-radius: 2px;
+  white-space: nowrap;
+  animation: toast-in 0.2s ease-out;
+  pointer-events: none;
+}
+
+@keyframes toast-in {
+  from { transform: translateX(-50%) translateY(-8px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+
+.game-toast--success {
+  background: rgba(9, 9, 9, 0.95);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  color: #4ade80;
+  box-shadow: 0 0 16px rgba(74, 222, 128, 0.12);
+}
+
+.game-toast--error {
+  background: rgba(9, 9, 9, 0.95);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.12);
+}
+
+/* ── Walk mode hint ─────────────────────────────────────── */
+
+.walk-hint {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(9, 9, 9, 0.88);
+  border: 1px solid #1a2a3a;
+  border-radius: 2px;
+  padding: 6px 16px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: #555555;
+  pointer-events: none;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+}
+
+.walk-hint__key {
+  color: #38bdf8;
+  letter-spacing: 2px;
+}
+
+.walk-hint__sep {
+  color: #2a2a2a;
 }
 
 /* ── Scanline overlay ────────────────────────────────── */

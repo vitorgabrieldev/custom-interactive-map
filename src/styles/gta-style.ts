@@ -81,15 +81,38 @@ export const GTA_STYLE: StyleSpecification = {
       paint: { 'line-color': '#0a0f14', 'line-width': 1.5 },
     },
 
-    // Buildings
+    // Buildings — flat (low zoom only)
     {
       id: 'building',
       type: 'fill',
       source: 'openmaptiles',
       'source-layer': 'building',
+      maxzoom: 14,
       paint: {
         'fill-color': '#1e1e1e',
         'fill-outline-color': '#262626',
+      },
+    },
+
+    // Buildings — 3D extrusion (zoom 14+)
+    {
+      id: 'building-3d',
+      type: 'fill-extrusion',
+      source: 'openmaptiles',
+      'source-layer': 'building',
+      minzoom: 14,
+      paint: {
+        'fill-extrusion-color': [
+          'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 4],
+          0,   '#141414',
+          10,  '#181818',
+          30,  '#1c1c1c',
+          80,  '#1f1f1f',
+          200, '#242424',
+        ],
+        'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 4],
+        'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+        'fill-extrusion-opacity': 0.92,
       },
     },
 
